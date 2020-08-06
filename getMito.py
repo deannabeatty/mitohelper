@@ -2,128 +2,96 @@
 
 import click
 import sys
-import os.path
 from os import path
 
 @click.command()
 @click.option('-i','--input_file', required=True, type=str, help='Input query file (e.g. input.txt)')
 @click.option('-o','--output_prefix', required=True, type=str, help='Output prefix (e.g. OUT)')
-@click.option('-r','--reference_file', required=True, type=str, help='Database file: either 12S.ref.tsv or mitofish.ref.tsv')
+@click.option('-d','--database_file', required=True, type=str, help='Database file (e.g. mitofish.all.Jul2020.tsv')
+@click.option('-l','--tax_level',type=click.Choice(["1","2","3","4","5","6","7"]), help='The taxonomic level of the search (e.g 7 for species, 6 for genus etc)')
+@click.option('--fasta/--no-fasta', default=False, help='Generate FASTA file output containing sequences of all matching hits (default=FALSE)')
 
-def getMito(input_file,output_prefix,reference_file):
-    """Script to extract GenBank accession numbers of 12S rRNA gene sequences or mitochondrial sequences from a user-defined subspecies/species/genus list"""
-    ref=tuple(open(input_file,'r'))
-    full_path=str(output_prefix+"_subspecies.hits.tsv")
-    species_path=str(output_prefix+"_species.hits.tsv")
-    genus_path=str(output_prefix+"_genus.hits.tsv")
+def getMito(input_file,output_prefix,database_file,tax_level,fasta):
+	
+	"""Script to extract mitochondrial sequence records from a user-provided list of fish taxonomic names"""
+	ref=tuple(open(input_file,'r'))
+	full_path=str(output_prefix+"_L"+tax_level+"_hits.tsv")
 
-    # Throw an error message and exit if output file(s) already exist
+	# Throw an error message and exit if output file(s) already exist
+	if path.exists(full_path):
+		sys.exit("Error: Output TSV file exists! Please rename output TSV file and try again!")
 
-    if path.exists(full_path) or path.exists(species_path) or path.exists(genus_path) :
-        sys.exit("Error: Output file exists! Please rename output file and try again!")
-    
-    # This function performs matching at the specified level and writes results to the corresponding output file
-    # Output files are tab-separated with the following columns:
-    # Query, taxonomic level, GenBank accession number, gene description
-    def matchme(query,level):
-    	count=0
-    	outpath=str(output_prefix+"_"+level+".hits.tsv")
-    	output=open(outpath,'a')
-    	with open(reference_file, 'r') as f:
-        	for line in f.readlines():
-            		if query in line:
-                    		count += 1
-                    		output.write("%s\t%s\t%s" % (query,level,line))
-    	output.close()
-    	print("Query:%s\tLevel:%s\t# Hits:%d" % (query,level,count))
-    	return;
+	if fasta:
+		fasta_path=(output_prefix+"_L"+tax_level+".fasta")
+		if path.exists(fasta_path):
+			sys.exit("Error: Output FASTA file exists! Please rename output FASTA file and try again!")
+		fasta=open(fasta_path,'a')
+		
+	output=open(full_path,'a')
+	output.write("Query\tAccession\tGene definition\ttxid\tSuperkingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies\tSequence\n")
+
+	# This matchme function performs matching and writes results to the output file
+	def matchme(query):
+		count=0
+
+		with open(database_file, 'r') as db:
+			for line in db.readlines():
+				if query.casefold() in line.casefold():
+					count += 1
+					output.write("%s\t%s" % (query,line))
+					if fasta:
+						fields=line.rsplit("\t")
+						acc=str(fields[0])
+						seq=str(fields[10])
+						fasta.write(">%s\n%s" % (acc,seq))
+
+		print("Search string:%s\tTaxonomic level:L%s\tHits:%d" % (query,tax_level,count))
+		return;
 
 
-    # The while loop below goes through the input file line by line 
-    i = 0
-    seen=set()
+	column=int(tax_level)+2
 
-    while (i < len(ref)):
+	i = 0
+	seen=set()
 
-        # Split string in query into genus,species, and subspecies (if present)
-        taxa=str(ref[i]).rsplit()
-        fulltaxa=str(ref[i]).rsplit("\n")
-        fullquery=str(fulltaxa[0])
-        gquery=str(taxa[0])
-
-        # Check if species string exist in query
-        if (len(taxa)>1):
-            squery=str(taxa[0]+" "+taxa[1])
-
-        qcount = i+1
+	while (i < len(ref)):
+		# Process and count each query
+		fulltaxa=str(ref[i]).rsplit("\n")
+		fullquery=str(fulltaxa[0])
+		qcount = i+1
         
-        if (len(fullquery)<2 or len(squery)<2 or len(gquery)<2):
-            print ("=== Searching user query #%d ===" % qcount)
-            print("ERROR: Query: <%s> has name(s) that is/are too short! Skipping search..." % fullquery)            
+		# Produce error if the query is <2 characters
+		if (len(fullquery)<2):
+			print ("=== Searching query #%d: <%s> ===" % (qcount,fullquery))
+			print("ERROR: Query is too short (<2 characters)! Skipping search...")            
+			i += 1
 
-        else:
-            print ("=== Searching user query #%d ===" % qcount)
+		else:
+			print ("=== Searching query #%d: <%s> ===" % (qcount,fullquery))
+			
+			with open(database_file, 'r') as f:
+				for line in f.readlines():
+					if fullquery.casefold() in line.casefold():
+						taxa=line.rsplit("\t")
+						levelname=str(taxa[column])
 
-    # These if statements determine the level of matching (subspecies/species/genus) for each UNIQUE query 
+						# Check for query duplicates at the specified taxonomic level, skip search if query is duplicated						
+						if levelname not in seen:
+							seen.add(levelname)	
+							matchme(query=levelname)
+							break
+						else:
+							print("DUPLICATE WARNING: Query has already been processed!")
+							break
+				i += 1
+	f.close()
+	output.close()
+	print ("==== Run complete! ===")
+	print ("Accession numbers of subspecies hits and description saved in %s" % full_path)
 
-            if (fullquery==gquery):
-                if fullquery not in seen:
-                    matchme(query=fullquery,level="genus")
-                    seen.add(fullquery)
-                else:
-                    print("Duplicate warning: Genus %s has already been processed." % fullquery)
-
-            elif (fullquery==squery):
-                if fullquery not in seen:
-                    matchme(query=fullquery,level="species")
-                    seen.add(fullquery)
-                else:
-                    print("Duplicate query: Species %s has already been processed." % fullquery)
-                if gquery not in seen:
-                    matchme(query=gquery,level="genus")
-                    seen.add(gquery)
-                else:
-                    print("Duplicate query: Genus %s has already been processed." % gquery)
-
-            else:
-                if fullquery not in seen:
-                    matchme(query=fullquery,level="subspecies")
-                    seen.add(fullquery)
-                else:
-                    print("Duplicate query: Species %s has already been processed." % fullquery)
-                if squery not in seen:
-                    matchme(query=squery,level="species")
-                    seen.add(squery)
-                else:
-                    print("Duplicate query: Species %s has already been processed." % squery)
-                if gquery not in seen:
-                    matchme(query=gquery,level="genus")
-                    seen.add(gquery)
-                else:
-                    print("Duplicate query: Genus %s has already been processed." % gquery)
-
-        i += 1
-
-    print ("==== Run complete! ===")
-
-    # Check and report on the types of output files generated 
-
-    if path.exists(genus_path): 
-        print ("Accession numbers of genus hits and description saved in %s" % genus_path)
-    else:
-        print("No genus detected in input file.")
-
-    if path.exists(species_path):
-        print ("Accession numbers of species hits and description saved in %s" % species_path)
-    else:
-        print("No species detected in input file.")
-    
-    
-    if path.exists(full_path):
-    	print ("Accession numbers of subspecies hits and description saved in %s" % full_path)
-    else:
-    	print("No subspecies detected in input file.")
+	if fasta:
+		print ("FASTA-formatted sequences saved in %s" % fasta_path)
 
 if __name__ == '__main__':
-    getMito()
+	getMito()
 
