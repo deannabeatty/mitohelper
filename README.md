@@ -7,29 +7,26 @@
 - using pre-formatted QIIME-compatible ribosomal RNA (12S or 12S+16S+18S) sequence and taxonomy databases for downstream analysis (available in the `QIIME-compatible` folder) 
 - knowing more about our data processing pipeline and mitohelper algorithm (visit the [DevWiki](https://github.com/aomlomics/mitohelper/wiki/) for all the nitty gritty details!)
 
-Dependencies
+Install Dependencies
 ----
+Install the required dependencies via conda or pip
 
-> - Tested on python 3.6.10
+## Using conda
+  - Create conda environment with all dependencies using `environment.yml`:
+    ```
+    conda env create -f environment.yml
+    ```  
+    *See [environment.yml](environment.yml) to view dependencies.*
+
+## Using pip
+> - Install Python3 (*tested on python 3.6.10*)
 > - For local blastn searches, [NCBI BLAST+ executables](https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Web&PAGE_TYPE=BlastDocs&DOC_TYPE=Download) (specifically `blastn`) must be installed and in the system path
 
-
-Required python modules:
-- click (v7.1.2)
-- matplotlib (v3.3.4)
-- pandas (v0.25.3)
-- seaborn (v0.10.1)
-
-  Installation:
-  - pip:  
+  - Installation:
     ```
     pip install -r requirements.txt
     ```
-  - conda:  
-    ```
-    conda install --file requirements.txt
-    ```
-
+    *See [requirements.txt](requirements.txt) to view dependencies.*
 
 Usage
 ----
